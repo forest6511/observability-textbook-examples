@@ -1,0 +1,21 @@
+# 第2章: LGTM オールインワンを 1 コンテナで動かす。
+# grafana/otel-lgtm は Grafana 公式の dev/demo/testing 専用イメージ。
+# 本番では使わない（第3章で各コンポーネントに分解する）。
+services:
+  lgtm:
+    image: grafana/otel-lgtm:0.28.0
+    container_name: lgtm
+    ports:
+      - "3000:3000"   # Grafana（ブラウザで開く。初期 admin/admin）
+      - "4317:4317"   # OTLP gRPC（アプリからテレメトリを送る）
+      - "4318:4318"   # OTLP HTTP（同上）
+    volumes:
+      # 再起動でデータを消さないための永続化。名前付き volume に保存する。
+      - lgtm-grafana:/data/grafana
+      - lgtm-prometheus:/data/prometheus
+      - lgtm-loki:/loki
+
+volumes:
+  lgtm-grafana:
+  lgtm-prometheus:
+  lgtm-loki:

@@ -1,0 +1,101 @@
+# 第8章: 第3章の分解版スタックに、計装した2つのアプリを足す。
+#   python-dice … Flask を zero-code 計装（opentelemetry-instrument）
+#   go-dice     … Go を手動 SDK 計装
+# どちらも OTLP で otel-collector:4317 に送り、Collector が Tempo に振り分ける。
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.154.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-otlp-receiver"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider",
+             "http://localhost:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  loki:
+    image: grafana/loki:3.6.0
+    container_name: loki
+    user: "0"
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:3.0.0
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo/config.yaml:ro
+    ports:
+      - "3200:3200"
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      tempo:
+        condition: service_started
+
+  # Python: zero-code 計装（Dockerfile の CMD が opentelemetry-instrument）。
+  python-dice:
+    build: ./python-app
+    container_name: python-dice
+    environment:
+      OTEL_SERVICE_NAME: python-dice
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: otlp
+      # logs signal は後発（beta 相当）。trace/metric を先に固める。
+      OTEL_LOGS_EXPORTER: none
+    ports:
+      - "8000:8000"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  # Go: 手動 SDK 計装。エンドポイントはコード側で環境変数から読む。
+  go-dice:
+    build: ./go-app
+    container_name: go-dice
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    ports:
+      - "8001:8001"
+    depends_on:
+      otel-collector:
+        condition: service_started

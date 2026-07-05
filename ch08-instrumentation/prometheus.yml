@@ -1,0 +1,13 @@
+# Prometheus の最小設定。
+# 本章では「Collector から OTLP でメトリクスを受ける」ことに集中し、
+# scrape_configs は Prometheus 自身の監視だけに絞る。
+# 本格的な scrape 設定は第4章で扱う。
+
+global:
+  scrape_interval: 15s      # 収集間隔。標準的な値。
+
+scrape_configs:
+  # Prometheus が自分自身のメトリクスを収集する。
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

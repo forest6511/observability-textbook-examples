@@ -1,0 +1,24 @@
+# 第11章で使う LogQL クエリ集。
+# Grafana の Explore（Loki datasource）で実行する。
+
+# --- ログクエリ（ログ行を返す）---
+
+# job=checkout のログから error を含む行だけ絞る（line filter）
+{job="checkout"} |= `error`
+
+# JSON を解析し、status_code=500 の行だけに絞る（parser + label filter）
+{job="checkout"} | json | status_code = `500`
+
+# msg だけを取り出して表示する（line_format）
+{job="checkout"} | json | line_format "{{.msg}}"
+
+# --- メトリクスクエリ（数値を返す）---
+
+# 直近1分の error 件数を集約する
+sum(count_over_time({job="checkout"} |= `error` [1m]))
+
+# level 別の件数を数える（ログから RED の Errors を作る）
+sum by (level) (count_over_time({job="checkout"}[1m]))
+
+# 秒間のログ流量（rate）を level 別に見る
+sum by (level) (rate({job="checkout"}[1m]))

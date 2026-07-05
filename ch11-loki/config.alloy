@@ -1,0 +1,48 @@
+// Grafana Alloy でファイルログを収集して Loki に送る最小構成。
+// Promtail は 2026-03-02 に EOL。現行の正解は Alloy。
+// local.file_match（探す）→ loki.source.file（読む）→
+// loki.process（JSON を解析して trace_id を structured metadata に）→
+// loki.write（Loki へ送る）を forward_to で結線する。
+
+// 1. 監視対象のファイルを glob で探す。job ラベルを付ける。
+local.file_match "app" {
+  path_targets = [{
+    __path__ = "/var/log/app/*.log",
+    job      = "checkout",
+  }]
+}
+
+// 2. 見つけたファイルを tail して次のコンポーネントに渡す。
+loki.source.file "app" {
+  targets    = local.file_match.app.targets
+  forward_to = [loki.process.app.receiver]
+}
+
+// 3. JSON を解析し、trace_id を structured metadata として付与する。
+//    level はラベルにする（低 cardinality）。trace_id はラベルにしない
+//    （高 cardinality なので structured metadata に置く）。
+loki.process "app" {
+  stage.json {
+    expressions = {
+      level    = "level",
+      trace_id = "trace_id",
+    }
+  }
+
+  stage.labels {
+    values = { level = "" }
+  }
+
+  stage.structured_metadata {
+    values = { trace_id = "" }
+  }
+
+  forward_to = [loki.write.default.receiver]
+}
+
+// 4. Loki の push エンドポイントへ送る。
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}

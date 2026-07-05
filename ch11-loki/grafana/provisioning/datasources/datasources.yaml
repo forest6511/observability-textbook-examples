@@ -1,0 +1,13 @@
+# Grafana に Loki データソースを自動登録する（provisioning）。
+# 起動時に Loki が最初から繋がった状態になる。
+# サービス名 loki が compose 内の DNS 名になる。
+
+apiVersion: 1
+
+datasources:
+  - name: Loki
+    type: loki
+    uid: loki
+    url: http://loki:3100
+    access: proxy
+    isDefault: true

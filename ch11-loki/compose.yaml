@@ -1,0 +1,60 @@
+# 第11章: ログを集める — Loki と Alloy。
+# logger（JSON ログを吐く）→ Alloy（tail して収集）→ Loki（保存）→
+# Grafana（LogQL で検索）の通しで動かす。
+# image タグは確定値でピン留めする。
+
+services:
+  # --- JSON 構造化ログを吐き続けるアプリ ---
+  logger:
+    image: python:3.13-slim
+    container_name: logger
+    command: ["python", "/app/logger.py"]
+    volumes:
+      - ./app:/app:ro
+      - app-logs:/var/log/app   # Alloy と共有するログ置き場。
+
+  # --- ログ収集エージェント（Promtail の後継）---
+  alloy:
+    image: grafana/alloy:v1.17.1
+    container_name: alloy
+    command:
+      - "run"
+      - "/etc/alloy/config.alloy"
+      - "--storage.path=/var/lib/alloy/data"
+    volumes:
+      - ./config.alloy:/etc/alloy/config.alloy:ro
+      - app-logs:/var/log/app:ro   # logger のログを読む。
+    depends_on:
+      - loki
+      - logger
+
+  # --- ログの保存・検索 ---
+  loki:
+    image: grafana/loki:3.6.0
+    container_name: loki
+    # コンテナ内 /loki への書き込み権限を確保するため root で起動する。
+    user: "0"
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"   # Loki API（起動確認・LogQL クエリ）
+
+  # --- 可視化 ---
+  grafana:
+    image: grafana/grafana:12.0.0
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3000:3000"   # Grafana（ブラウザで開く）
+    depends_on:
+      - loki
+
+volumes:
+  app-logs:
+  grafana-data:

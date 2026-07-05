@@ -1,0 +1,60 @@
+# 第12章: 三本柱を相互リンクさせる datasource provisioning。
+# Prometheus / Tempo / Loki を、4 方向の相関つきで自動登録する。
+#   exemplar        メトリクス → トレース（Prometheus に設定）
+#   tracesToLogsV2  トレース   → ログ    （Tempo に設定）
+#   tracesToMetrics トレース   → メトリクス（Tempo に設定）
+#   derivedFields   ログ       → トレース（Loki に設定）
+# uid が相互参照の鍵。loki / tempo / prometheus で一致させる。
+
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    type: prometheus
+    uid: prometheus
+    url: http://prometheus:9090
+    access: proxy
+    isDefault: true
+    jsonData:
+      # メトリクスの exemplar から trace_id を取り出し、Tempo へ飛ぶ。
+      # Tempo が付ける exemplar のラベル名は traceID（大文字 ID）。
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+
+  - name: Tempo
+    type: tempo
+    uid: tempo
+    url: http://tempo:3200
+    access: proxy
+    jsonData:
+      # トレース → ログ。span から同じ trace_id のログを Loki で開く。
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: '-1h'
+        spanEndTimeShift: '1h'
+        filterByTraceID: true
+      # トレース → メトリクス。span から RED メトリクスに戻る。
+      tracesToMetrics:
+        datasourceUid: prometheus
+        queries:
+          - name: RED rate
+            query: 'sum(rate(traces_spanmetrics_calls_total{$$__tags}[5m]))'
+      # サービスグラフを Prometheus の span metrics から描く。
+      serviceMap:
+        datasourceUid: prometheus
+
+  - name: Loki
+    type: loki
+    uid: loki
+    url: http://loki:3100
+    access: proxy
+    jsonData:
+      # ログ → トレース。OTLP 経由のログは trace_id が structured metadata に
+      # 入るので、matcherType: label でメタデータから直接拾い Tempo へ飛ぶ。
+      derivedFields:
+        - name: TraceID
+          matcherType: label
+          matcherRegex: trace_id
+          url: '$${__value.raw}'
+          datasourceUid: tempo

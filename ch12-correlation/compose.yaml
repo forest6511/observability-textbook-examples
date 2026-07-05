@@ -1,0 +1,104 @@
+# 第10章: 計装アプリ → Collector → Tempo で分散トレーシング。
+# Tempo は metrics_generator で trace から RED メトリクスを生成し、
+# Prometheus に remote_write する。Prometheus は remote write receiver を有効化。
+
+services:
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.154.0
+    container_name: otel-collector
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otelcol/config.yaml:ro
+    ports:
+      - "4317:4317"
+      - "4318:4318"
+    depends_on:
+      prometheus:
+        condition: service_healthy
+      tempo:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.enable-otlp-receiver"
+      # Tempo の metrics_generator からの remote_write を受け付ける。
+      - "--web.enable-remote-write-receiver"
+      # exemplar（メトリクスに trace_id を紐づける点）を保持する。
+      - "--enable-feature=exemplar-storage"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider",
+             "http://localhost:9090/-/healthy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  loki:
+    image: grafana/loki:3.6.0
+    container_name: loki
+    user: "0"
+    command: ["-config.file=/etc/loki/config.yaml"]
+    volumes:
+      - ./loki-config.yaml:/etc/loki/config.yaml:ro
+    ports:
+      - "3100:3100"
+
+  tempo:
+    image: grafana/tempo:3.0.0
+    container_name: tempo
+    command: ["-config.file=/etc/tempo/config.yaml"]
+    volumes:
+      - ./tempo.yaml:/etc/tempo/config.yaml:ro
+    ports:
+      - "3200:3200"
+
+  grafana:
+    image: grafana/grafana:12.0.0
+    container_name: grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    depends_on:
+      tempo:
+        condition: service_started
+
+  python-dice:
+    build: ./python-app
+    container_name: python-dice
+    environment:
+      OTEL_SERVICE_NAME: python-dice
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
+      OTEL_TRACES_EXPORTER: otlp
+      OTEL_METRICS_EXPORTER: none
+      # ログも OTLP で送り、Collector 経由で Loki に流す（相関の要）。
+      OTEL_LOGS_EXPORTER: otlp
+      # Python logging に trace_id / span_id を注入する。
+      OTEL_PYTHON_LOG_CORRELATION: "true"
+      # logging を OTLP に橋渡しするハンドラを root logger に付ける。
+      OTEL_PYTHON_LOGGING_AUTO_INSTRUMENTATION_ENABLED: "true"
+    ports:
+      - "8000:8000"
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  go-dice:
+    build: ./go-app
+    container_name: go-dice
+    environment:
+      OTEL_EXPORTER_OTLP_ENDPOINT: otel-collector:4317
+    ports:
+      - "8001:8001"
+    depends_on:
+      otel-collector:
+        condition: service_started

@@ -8,9 +8,11 @@ Python logging を OTLP logs に橋渡しし、現在の trace_id をログに�
 """
 import logging
 import random
+import time
 
 from flask import Flask
 from opentelemetry import trace
+from opentelemetry.trace import Status, StatusCode
 
 app = Flask(__name__)
 # 手動 span 用の tracer。zero-code の自動計装が SDK をセットアップ済みなので、
@@ -28,8 +30,17 @@ def roll():
         # 1 の目を「決済失敗」に見立てて error ログを出す。
         # zero-code 計装がこのログに現在の trace_id を添付し OTLP で送る。
         if value == 1:
+            # 決済に失敗するリクエストは、リトライで時間がかかってから落ちる。
+            # この遅延が charge span を長くし、メトリクスの p90 を押し上げる。
+            # レイテンシの跳ね上がり → 遅い span → 失敗ログ、という相関の起点になる。
+            time.sleep(random.uniform(0.4, 0.8))
+            span.set_attribute("charge.retried", True)
+            # span をエラー状態にする。metrics_generator が status_code=
+            # STATUS_CODE_ERROR の span metrics を生成し、エラー率が計算できる。
+            span.set_status(Status(StatusCode.ERROR, "payment failed"))
             logger.error("payment failed for dice roll")
         else:
+            time.sleep(random.uniform(0.005, 0.02))
             logger.info("dice roll handled")
         return {"value": value}
 

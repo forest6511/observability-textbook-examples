@@ -1,0 +1,34 @@
+# Loki の最小設定（single-binary / filesystem storage）。
+# 開発・検証向け。auth を無効化し、ローカルディスクにログを保存する。
+
+auth_enabled: false
+
+server:
+  http_listen_port: 3100      # push / query / OTLP 受信の口。
+
+common:
+  instance_addr: 127.0.0.1
+  # /loki はイメージ内で loki ユーザー（uid 10001）所有のため書き込める。
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: 2020-10-24
+      store: tsdb           # 現行の推奨インデックス。
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # OTLP で送られてくる structured metadata を許可する。
+  allow_structured_metadata: true

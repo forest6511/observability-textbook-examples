@@ -7,7 +7,7 @@ groups:
       - alert: HighRequestLatency
         expr: |
           histogram_quantile(0.9,
-            sum by (le) (rate(prometheus_http_request_duration_seconds[5m]))
+            sum by (handler) (rate(prometheus_http_request_duration_seconds[5m]))
           ) > 0.5
         for: 5m
         labels:

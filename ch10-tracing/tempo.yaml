@@ -1,0 +1,46 @@
+# 第10章: metrics_generator を有効にした Tempo。
+# トレースを OTLP で受け、ローカルに保存しつつ、
+# span_metrics（RED メトリクス）と service_graphs（依存関係）を生成して
+# Prometheus に remote_write する。
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+# trace から RED メトリクスと service graph を生成する。
+# 有効化する processor は overrides で指定する（下部）。ここは storage の設定。
+metrics_generator:
+  storage:
+    path: /var/tempo/generator/wal
+    # 生成したメトリクスを Prometheus の remote write receiver へ送る。
+    remote_write:
+      - url: http://prometheus:9090/api/v1/write
+        send_exemplars: true
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+# metrics_generator は override で有効化する必要がある。
+# processor 名はハイフン区切り（span-metrics / service-graphs）。
+overrides:
+  defaults:
+    metrics_generator:
+      processors: [span-metrics, service-graphs]
+
+usage_report:
+  reporting_enabled: false

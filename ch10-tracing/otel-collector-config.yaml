@@ -1,0 +1,61 @@
+# 第9章: Collector の完成 config。
+# 第3章の最小版に memory_limiter（OOM 防止）と batch（スループット）を足し、
+# 3つの signal それぞれに receivers→processors→exporters を配線する。
+# processor は順序が意味を持つ。memory_limiter を先頭に置く。
+
+receivers:
+  # アプリ／スクリプトからのテレメトリを OTLP で受ける入口。
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # OOM 防止。pipeline の先頭に置き、上限に近づくと受信側へ backpressure をかける。
+  # limit_mib はハード上限、spike_limit_mib はスパイク見込み（ソフト上限 = limit - spike）。
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+
+  # 送出をまとめてスループットを上げる。
+  batch:
+    send_batch_size: 8192
+    timeout: 5s
+
+exporters:
+  # メトリクス → Prometheus の OTLP receiver へ。
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+  # ログ → Loki の OTLP ネイティブ受信エンドポイントへ。
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  # トレース → Tempo の OTLP gRPC receiver へ。
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  # signal ごとに別配線。memory_limiter → batch の順で processors を並べる。
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp/loki]
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/tempo]

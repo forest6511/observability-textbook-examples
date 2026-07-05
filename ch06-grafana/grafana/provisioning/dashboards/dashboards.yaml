@@ -1,0 +1,12 @@
+# ダッシュボードを起動時に自動登録する provisioning 設定。
+# options.path に置いた JSON を Grafana が読み込む。
+apiVersion: 1
+
+providers:
+  - name: default
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

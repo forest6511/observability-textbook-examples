@@ -1,0 +1,46 @@
+# 第5章 PromQL 実践クエリ集
+# 第3章/第4章の分解版スタック（Prometheus + node_exporter）で実行できる。
+# Prometheus (localhost:9090) の入力欄、または Grafana Explore に貼る。
+
+# --- 5-1 instant vector / range vector ---
+node_load1
+node_load1[1m]
+
+# --- 5-2 ラベルマッチャ ---
+prometheus_http_requests_total{code="200"}
+prometheus_http_requests_total{code=~"2..", handler!="/metrics"}
+
+# --- 5-3 rate（カウンタの秒間増加率）---
+rate(prometheus_http_requests_total[5m])
+
+# --- 5-4 increase（総増分）---
+increase(prometheus_http_requests_total[1h])
+
+# --- 5-5 集約（RPS）---
+sum(rate(prometheus_http_requests_total[5m]))
+sum by (handler) (rate(prometheus_http_requests_total[5m]))
+
+# --- 5-6 エラー率（5xx / 全体）。エラーが無ければ空を返す ---
+sum(rate(prometheus_http_requests_total{code=~"5.."}[5m]))
+  /
+sum(rate(prometheus_http_requests_total[5m]))
+
+# --- 5-7 レイテンシ p90（native histogram）---
+histogram_quantile(
+  0.9,
+  sum by (handler) (rate(prometheus_http_request_duration_seconds[5m]))
+)
+
+# --- 5-9 rate と sum の順序（正）---
+sum(rate(prometheus_http_requests_total[5m]))
+
+# --- 5-10 offset（前週比）。1週間分のデータが無ければ空 ---
+sum(rate(prometheus_http_requests_total[5m]))
+  /
+sum(rate(prometheus_http_requests_total[5m] offset 1w))
+
+# --- 5-10 predict_linear（4時間後のディスク空き容量）---
+predict_linear(node_filesystem_avail_bytes[1h], 4 * 3600)
+
+# --- 5-11 CPU 使用率（USE の Utilization）---
+1 - avg(rate(node_cpu_seconds_total{mode="idle"}[5m]))

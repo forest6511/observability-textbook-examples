@@ -1,0 +1,28 @@
+# Tempo の最小設定。
+# OTLP でトレースを受け取り、ローカルディスクに保存する。
+# metrics_generator（トレースから RED メトリクスを生成）は第10章で扱う。
+
+stream_over_http_enabled: true
+
+server:
+  http_listen_port: 3200      # クエリ／API の口。Grafana はここを参照する。
+
+distributor:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"   # トレースを OTLP gRPC で受ける。
+        http:
+          endpoint: "0.0.0.0:4318"   # 同 HTTP。
+
+storage:
+  trace:
+    backend: local
+    wal:
+      path: /var/tempo/wal
+    local:
+      path: /var/tempo/blocks
+
+usage_report:
+  reporting_enabled: false

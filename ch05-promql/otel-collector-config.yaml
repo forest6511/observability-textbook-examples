@@ -1,0 +1,53 @@
+# OpenTelemetry Collector の最小設定。
+# OTLP で受けたテレメトリを、メトリクス→Prometheus / ログ→Loki /
+# トレース→Tempo の3つのバックエンドへ振り分ける。
+# 注意: logs signal は Collector 全体としては beta。本章では OTLP 経由で扱う。
+
+receivers:
+  # アプリ／スクリプトからのテレメトリを OTLP で受ける入口。
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  # 送出をまとめて効率化する最小の processor。
+  # 本番向けの memory_limiter は第9章で足す。
+  batch: {}
+
+exporters:
+  # メトリクス → Prometheus の OTLP receiver へ。
+  # Prometheus 側は --web.enable-otlp-receiver で受信を有効化する。
+  otlphttp/prometheus:
+    endpoint: http://prometheus:9090/api/v1/otlp
+    tls:
+      insecure: true
+
+  # ログ → Loki の OTLP ネイティブ受信エンドポイントへ。
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+    tls:
+      insecure: true
+
+  # トレース → Tempo の OTLP gRPC receiver へ。
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlphttp/loki]
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/tempo]

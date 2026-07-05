@@ -1,0 +1,19 @@
+# 第4章: 収集設定を足した prometheus.yml。
+# Prometheus 自身に加えて node_exporter を scrape し、
+# native histograms の受け入れを有効化する。
+
+global:
+  scrape_interval: 15s      # 既定は 1m。解像度のため 15s にする。
+  # native histograms を受け入れる。Prometheus 3.9 以降は明示が必要。
+  scrape_native_histograms: true
+
+scrape_configs:
+  # Prometheus 自身のメトリクス。
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # ホスト（CPU/メモリ/ディスク等）のメトリクスを node_exporter から収集。
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]

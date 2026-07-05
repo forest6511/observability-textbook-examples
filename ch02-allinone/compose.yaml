@@ -5,6 +5,11 @@ services:
   lgtm:
     image: grafana/otel-lgtm:0.28.0
     container_name: lgtm
+    environment:
+      # Grafana の UI を日本語表示にする。
+      - GF_USERS_DEFAULT_LANGUAGE=ja-JP
+      # Grafana の UI をライトモード表示にする。
+      - GF_USERS_DEFAULT_THEME=light
     ports:
       - "3000:3000"   # Grafana（ブラウザで開く。初期 admin/admin）
       - "4317:4317"   # OTLP gRPC（アプリからテレメトリを送る）

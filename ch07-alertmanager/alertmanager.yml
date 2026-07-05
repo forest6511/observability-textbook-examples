@@ -1,0 +1,39 @@
+# 第7章: Alertmanager 設定。
+# route でチーム別に振り分け、grouping で束ね、inhibition で抑制する。
+# 実発火の確認は webhook-sink（ローカル）で行う。Slack は設定例のみ。
+
+route:
+  receiver: default
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # severity=critical のアラートだけ critical receiver に振り分ける。
+    - matchers:
+        - severity="critical"
+      receiver: critical
+
+inhibit_rules:
+  # 同じ alertname について critical が出ていれば、同名 warning を抑制する。
+  - source_matchers:
+      - severity="critical"
+    target_matchers:
+      - severity="warning"
+    equal: ['alertname']
+
+receivers:
+  # 実発火の確認先。届いた通知は webhook-sink のログに出る。
+  - name: default
+    webhook_configs:
+      - url: http://webhook-sink:5001/
+        send_resolved: true
+
+  # Slack は実在する Incoming Webhook URL が要るため設定例のみ。
+  # 使うときは api_url を自分の Webhook URL に置き換える。
+  - name: critical
+    slack_configs:
+      - api_url: https://hooks.slack.com/services/T000/B000/XXXX
+        channel: '#alerts-critical'
+        title: '{{ .CommonAnnotations.summary }}'
+        text: '{{ .CommonAnnotations.description }}'

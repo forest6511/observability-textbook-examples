@@ -1,0 +1,45 @@
+# 第7章: Prometheus のアラート評価 → Alertmanager → 通知 を通しで動かす。
+# 第6章までの巨大スタックは要らないので、アラートに必要な最小構成にする:
+#   Prometheus（rule 評価）/ Alertmanager（振り分け・通知）/
+#   node_exporter（発火させる元メトリクス）/ webhook-sink（通知の受信確認）。
+# image タグは versions.env の確定値でピン留めする。
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.12.0
+    container_name: prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./rules:/etc/prometheus/rules:ro
+    ports:
+      - "9090:9090"
+
+  alertmanager:
+    image: prom/alertmanager:v0.28.0
+    container_name: alertmanager
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+    volumes:
+      - ./alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "9093:9093"
+
+  # 発火の元になるホストメトリクス（node_load1 等）を公開する。
+  node-exporter:
+    image: quay.io/prometheus/node-exporter:v1.8.2
+    container_name: node-exporter
+    ports:
+      - "9100:9100"
+
+  # Alertmanager の webhook 通知先。届いた POST を標準出力に書くだけの
+  # 最小サーバ。Slack の実 URL が無くても通知の到達を確認できる。
+  webhook-sink:
+    image: python:3.13-slim
+    container_name: webhook-sink
+    command: ["python", "/app/sink.py"]
+    volumes:
+      - ./webhook-sink/sink.py:/app/sink.py:ro
+    ports:
+      - "5001:5001"

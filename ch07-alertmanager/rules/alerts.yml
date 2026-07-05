@@ -1,0 +1,30 @@
+# 第7章: alerting rule。
+# HighRequestLatency は本文リスト7-1（p90 レイテンシ）の例。
+# AlwaysFiring は実機で pending→firing を必ず起こすためのテスト用。
+groups:
+  - name: http-latency
+    rules:
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.9,
+            sum by (le) (rate(prometheus_http_request_duration_seconds[5m]))
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "p90 レイテンシが高い"
+          description: "p90 が {{ $value }}s です"
+
+  - name: test
+    rules:
+      # node_load1 は必ず 0 以上なので、この式は常に真になる。
+      # for を短くして pending→firing の遷移をすぐ観察できるようにする。
+      - alert: AlwaysFiring
+        expr: node_load1 >= 0
+        for: 15s
+        labels:
+          severity: warning
+        annotations:
+          summary: "テスト用の常時発火アラート"
+          description: "node_load1 = {{ $value }}"

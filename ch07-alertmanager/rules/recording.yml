@@ -1,0 +1,8 @@
+# 第7章: recording rule（本文リスト7-2）。
+# 重い集計を事前計算し、level:metric:operations 形式のメトリクスに保存する。
+groups:
+  - name: http-aggregation
+    interval: 30s
+    rules:
+      - record: code:prometheus_http_requests_total:sum
+        expr: sum by (code) (rate(prometheus_http_requests_total[5m]))

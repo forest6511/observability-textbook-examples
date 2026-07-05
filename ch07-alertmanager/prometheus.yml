@@ -1,0 +1,25 @@
+# 第7章: rule_files で alerting/recording rule を読み込み、
+# alerting.alertmanagers で発火したアラートの送り先を指定する。
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s   # rule を評価する間隔。
+
+rule_files:
+  - /etc/prometheus/rules/alerts.yml
+  - /etc/prometheus/rules/recording.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+scrape_configs:
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  - job_name: node
+    static_configs:
+      - targets: ["node-exporter:9100"]

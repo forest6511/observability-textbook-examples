@@ -4,6 +4,8 @@
 
 Prometheus・Grafana・OpenTelemetry・Loki・Tempo（LGTM スタック）を 1 つの `docker compose` で通しで動かす、実機検証済みのサンプル一式です。本文の各リスト・実行結果・画面はこのリポジトリのコードと 1 対 1 で対応します。
 
+Kindle 版: [Grafanaで作る監視入門](https://www.amazon.co.jp/dp/B0H7R8WV7Q)
+
 ## 動作前提
 
 - Docker Desktop（または Docker Engine）+ Docker Compose v2（`docker compose` コマンド）
